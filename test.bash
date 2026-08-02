@@ -4,7 +4,7 @@ set -eou pipefail
 
 if ! command -v feh &> /dev/null; then
   echo "Installing feh"
-  sudo pacman -Syu feh
+  sudo pacman -Syu feh --noconfirm
 fi
 
 IMAGE_NAME="${1:-${IMAGE_NAME:-test.ppm}}"
