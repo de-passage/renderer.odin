@@ -84,7 +84,7 @@ rasterize :: proc(
         depth := (wa * triangle[0].z + wb * triangle[1].z + wc * triangle[2].z)
         coord := y * width + x
         if abc == 0 && depth_buffer[coord] < depth {
-          depth_buffer[t] = depth
+          depth_buffer[coord] = depth
 
           color := colors[t]
 
