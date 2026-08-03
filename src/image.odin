@@ -143,7 +143,7 @@ main :: proc() {
   rasterize(triangles[:], colors[:], depth_buffer[:], opts.width, opts.height, output[:])
 
   file := opts.output
-  fmt.fprintfln(file, "P6\n%i %i\n255\n", opts.width, opts.height)
+  fmt.fprintf(file, "P6\n%i %i\n255\n", opts.width, opts.height)
   os.write(file, mem.slice_to_bytes(output[:]))
   return
 }
