@@ -76,9 +76,11 @@ rasterize :: proc(
     tl_x := f64(box[0].x) + .5
     tl_y := f64(box[0].y) + .5
 
-    efabc := 1. / edge_function(a.x, a.y, b, c)
-    efbca := 1. / edge_function(b.x, b.y, c, a)
-    efcab := 1. / edge_function(c.x, c.y, a, b)
+    area := edge_function(a.x, a.y, b, c)
+    if area == 0 {
+      continue
+    }
+    inverse_area := 1. / area
 
     dxab, dyab, cstab := edge_function_constants(a.xy, b.xy)
     dxbc, dybc, cstbc := edge_function_constants(b.xy, c.xy)
@@ -102,9 +104,9 @@ rasterize :: proc(
         // 3 = 0b11 -> (+1) 0b100 -> (& 0b010) -> 0
         abc := ((sign(efxab) + sign(efxbc) + sign(efxca) + 1) & 0b010)
         if abc == 0 {
-          wa := efxbc * efabc
-          wb := efxca * efbca
-          wc := efxab * efcab
+          wa := efxbc * inverse_area
+          wb := efxca * inverse_area
+          wc := efxab * inverse_area
 
           depth := (wa * triangle[0].z + wb * triangle[1].z + wc * triangle[2].z)
           coord := y * width + x
@@ -126,7 +128,7 @@ rasterize :: proc(
         efxbc += dybc
         efxca += dyca
       }
-      // EF(x, y + 1) = EF(x, y) + dx
+      // EF(x, y + 1) = EF(x, y) - dx
       efyab -= dxab
       efybc -= dxbc
       efyca -= dxca
@@ -162,17 +164,18 @@ main :: proc() {
   defer delete(output)
   depth_buffer := make([dynamic]f64, size, size)
   defer delete(depth_buffer)
-  current_index := 0
 
   fw := f64(opts.width)
   fh := f64(opts.height)
-  triangles: [2]Triangle = {
-    {{fw * 0.5, fh * 0.2, 1.}, {fw * 0.2, fh * 0.7, 1.}, {fw * 0.8, fh * 0.8, 1.}},
+  triangles: [3]Triangle = {
+    {{fw * 0.5, fh * 0.2, .9}, {fw * 0.2, fh * 0.7, .9}, {fw * 0.8, fh * 0.8, .9}},
     {{fw * 0.5, fh * 0.5, 0.1}, {fw * 1., fh * 0.1, 0.1}, {fw * 1., fh * 0.9, 0.1}},
+    {{fw * 0.2, fh * 0.5, 1.}, {fw * 0.4, fh * 0.5, 1.}, {fw * 1., fh * 0.5, 1.}}, // should not render (colinear)
   }
-  colors: [2]Triangle_Colors = {
+  colors: [3]Triangle_Colors = {
     {{1., 0., 0.}, {0., 1., 0.}, {0., 0., 1.}},
     {{1., 1., 1.}, {1., 1., 1.}, {1., 1., 0.}},
+    {{1., 0., 0.}, {1., 0., 0.}, {1., 0., 0.}},
   }
 
   rasterize(triangles[:], colors[:], depth_buffer[:], opts.width, opts.height, output[:])
