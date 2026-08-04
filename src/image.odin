@@ -44,6 +44,16 @@ edge_function :: proc(x: f64, y: f64, a: Point, b: Point) -> f64 {
   return ((x - a.x) * (b.y - a.y)) - ((y - a.y) * (b.x - a.x))
 }
 
+edge_function_constants :: proc(a, b: [2]f64) -> (dx, dy, cst: f64) {
+  // edge function (x - a.x) * (b.y - a.y) - (y - a.y) * (b.x - a.x)
+  //  =>           x(b.y - a.y) - a.x(b.y - a.y) - y(b.x - a.x) + a.y(b.x - a.x)
+  //  =>           x(b.y - a.y) - y(b.x - a.x)  + a.y(b.x - a.x) - a.x(b.y - a.y)
+  dy = b.y - a.y
+  dx = b.x - a.x
+  cst = a.y * dx - a.x * dy
+  return
+}
+
 rasterize :: proc(
   triangles: []Triangle,
   colors: []Triangle_Colors,
@@ -62,39 +72,64 @@ rasterize :: proc(
     b := triangle[1]
     c := triangle[2]
 
+    // tl means top left
+    tl_x := f64(box[0].x) + .5
+    tl_y := f64(box[0].y) + .5
+
+    efabc := 1. / edge_function(a.x, a.y, b, c)
+    efbca := 1. / edge_function(b.x, b.y, c, a)
+    efcab := 1. / edge_function(c.x, c.y, a, b)
+
+    dxab, dyab, cstab := edge_function_constants(a.xy, b.xy)
+    dxbc, dybc, cstbc := edge_function_constants(b.xy, c.xy)
+    dxca, dyca, cstca := edge_function_constants(c.xy, a.xy)
+
+    // => EF(x, y) = xDY - yDX + CST
+    efyab := tl_x * dyab - tl_y * dxab + cstab
+    efybc := tl_x * dybc - tl_y * dxbc + cstbc
+    efyca := tl_x * dyca - tl_y * dxca + cstca
+
     for y in box[0].y ..< box[1].y {
+      efxab := efyab
+      efxbc := efybc
+      efxca := efyca
       for x in box[0].x ..< box[1].x {
-        px := f64(x) + .5
-        py := f64(y) + .5
-        ab := edge_function(px, py, a, b)
-        bc := edge_function(px, py, b, c)
-        ca := edge_function(px, py, c, a)
 
         // 0 iff sum of relative position was 0 or 3 (all same relative position)
         // 0 = 0b00 -> (+1) 0b001 -> (& 0b010) -> 0
         // 1 = 0b01 -> (+1) 0b010 -> (& 0b010) -> 2
         // 2 = 0b10 -> (+1) 0b011 -> (& 0b010) -> 2
         // 3 = 0b11 -> (+1) 0b100 -> (& 0b010) -> 0
-        abc := ((sign(ab) + sign(bc) + sign(ca) + 1) & 0b010)
+        abc := ((sign(efxab) + sign(efxbc) + sign(efxca) + 1) & 0b010)
+        if abc == 0 {
+          wa := efxbc * efabc
+          wb := efxca * efbca
+          wc := efxab * efcab
 
-        wa := bc / edge_function(a.x, a.y, b, c)
-        wb := ca / edge_function(b.x, b.y, c, a)
-        wc := ab / edge_function(c.x, c.y, a, b)
+          depth := (wa * triangle[0].z + wb * triangle[1].z + wc * triangle[2].z)
+          coord := y * width + x
 
-        depth := (wa * triangle[0].z + wb * triangle[1].z + wc * triangle[2].z)
-        coord := y * width + x
-        if abc == 0 && depth_buffer[coord] < depth {
-          depth_buffer[coord] = depth
+          if depth_buffer[coord] < depth {
+            depth_buffer[coord] = depth
 
-          color := colors[t]
+            color := colors[t]
 
-          frame_buffer[coord] = {
-            u8((wa * color[0].r + wb * color[1].r + wc * color[2].r) * 255),
-            u8((wa * color[0].g + wb * color[1].g + wc * color[2].g) * 255),
-            u8((wa * color[0].b + wb * color[1].b + wc * color[2].b) * 255),
+            frame_buffer[coord] = {
+              u8((wa * color[0].r + wb * color[1].r + wc * color[2].r) * 255),
+              u8((wa * color[0].g + wb * color[1].g + wc * color[2].g) * 255),
+              u8((wa * color[0].b + wb * color[1].b + wc * color[2].b) * 255),
+            }
           }
         }
+        // EF(x + 1, y) = EF(x, y) + dy
+        efxab += dyab
+        efxbc += dybc
+        efxca += dyca
       }
+      // EF(x, y + 1) = EF(x, y) + dx
+      efyab -= dxab
+      efybc -= dxbc
+      efyca -= dxca
     }
   }
 }
