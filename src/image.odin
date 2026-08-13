@@ -14,10 +14,11 @@ Options :: struct {
 }
 
 RGB :: distinct [3]u8
-Point :: [3]f64
+Vec3 :: [3]f64
+Point :: distinct Vec3
 Vertex :: distinct Point
 Triangle :: [3]Point
-Triangle_Colors :: [3][3]f64
+Triangle_Colors :: [3]Vec3
 Box :: [2][2]int
 
 exit_with_prejudice :: proc(text: string, args: ..any, exit_code := 1) {
@@ -136,6 +137,44 @@ rasterize :: proc(
   }
 }
 
+ project_point :: #force_inline proc(point: Point, f: f64, hw: f64, hh: f64, iar: f64) -> (projected: Point) {
+  over_z := 1. / point.z
+  projected.x = (1 + (point.x * f * over_z * iar)) * hw
+  projected.y = (1 - (point.y * f * over_z)) * hh
+  projected.z = over_z
+  return
+}
+
+project :: proc(
+  triangles: []Triangle,
+  f: f64,
+  width: f64,
+  height: f64,
+  allocator := context.allocator,
+) -> (
+  output: []Triangle,
+) {
+  output = make([]Triangle, len(triangles), allocator)
+
+  inverse_aspect := height / width
+  half_width := width / 2.
+  half_height := height / 2.
+
+  for triangle, current_index in triangles {
+    o := &output[current_index]
+    if triangle.x.z < 0.1 || triangle.y.z < 0.1 || triangle.z.z < 0.1 {
+      // current triangle becomes completely 0, will not show in final result
+      o^ = Triangle{{0.,0.,0.},{0.,0.,0.},{0.,0.,0.}}
+      continue
+    }
+    o.x = project_point(triangle.x, f, half_width, half_height, inverse_aspect)
+    o.y = project_point(triangle.y, f, half_width, half_height, inverse_aspect)
+    o.z = project_point(triangle.z, f, half_width, half_height, inverse_aspect)
+  }
+
+  return
+}
+
 main :: proc() {
 
   opts := Options {
@@ -167,18 +206,29 @@ main :: proc() {
 
   fw := f64(opts.width)
   fh := f64(opts.height)
-  triangles: [3]Triangle = {
-    {{fw * 0.5, fh * 0.2, .9}, {fw * 0.2, fh * 0.7, .9}, {fw * 0.8, fh * 0.8, .9}},
-    {{fw * 0.5, fh * 0.5, 0.1}, {fw * 1., fh * 0.1, 0.1}, {fw * 1., fh * 0.9, 0.1}},
-    {{fw * 0.2, fh * 0.5, 1.}, {fw * 0.4, fh * 0.5, 1.}, {fw * 1., fh * 0.5, 1.}}, // should not render (colinear)
-  }
   colors: [3]Triangle_Colors = {
     {{1., 0., 0.}, {0., 1., 0.}, {0., 0., 1.}},
     {{1., 1., 1.}, {1., 1., 1.}, {1., 1., 0.}},
     {{1., 0., 0.}, {1., 0., 0.}, {1., 0., 0.}},
   }
+  triangles: [3]Triangle = {
+    {{-0.1, -0.1, 1.}, {0.1, -0.1, 1.}, {0., 0.1, 1.}},
+    {{-0.5, -0.5, 3.}, {0.5, -0.5, 3.}, {0., 0.5, 3.}},
+    {{-0.5, -0.5, 1.}, {0.5, -0.5, 1.}, {0., 0.5, 4.}},
+  }
 
-  rasterize(triangles[:], colors[:], depth_buffer[:], opts.width, opts.height, output[:])
+  projection := project(triangles[:], 1., fw, fh) // inverse aspect ratio
+  defer delete(projection)
+
+  /* absolute coordintates
+  projection: [3]Triangle = {
+    {{fw * 0.5, fh * 0.2, .9}, {fw * 0.2, fh * 0.7, .9}, {fw * 0.8, fh * 0.8, .9}},
+    {{fw * 0.5, fh * 0.5, 0.1}, {fw * 1., fh * 0.1, 0.1}, {fw * 1., fh * 0.9, 0.1}},
+    {{fw * 0.2, fh * 0.5, 1.}, {fw * 0.4, fh * 0.5, 1.}, {fw * 1., fh * 0.5, 1.}}, // should not render (colinear)
+  }
+    */
+
+  rasterize(projection, colors[:], depth_buffer[:], opts.width, opts.height, output[:])
 
   file := opts.output
   fmt.fprintf(file, "P6\n%i %i\n255\n", opts.width, opts.height)
