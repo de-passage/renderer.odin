@@ -10,3 +10,4 @@ Vertex :: distinct Point
 Triangle :: [3]Vertex
 Triangle_Colors :: [3]fRGB
 Box :: [2][2]int
+Rotation :: distinct [9]f64

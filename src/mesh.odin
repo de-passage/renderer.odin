@@ -56,3 +56,9 @@ release_mesh :: proc(mesh: ^Mesh, allocator := context.allocator) {
   mesh.position = nil
   mesh.triangles = nil
 }
+
+Object :: struct {
+  using mesh: Mesh,
+  rotation: Rotation,
+  translation: Vec3,
+}
