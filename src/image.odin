@@ -13,6 +13,58 @@ Options :: struct {
   output:       ^os.File `args:"file=cw"`,
 }
 
+Rotation :: distinct [9]f64
+
+Object :: struct {
+  using mesh: Mesh,
+  rotation: Rotation,
+  translation: Vec3,
+}
+
+rotation_matrix_x :: proc(theta: f64) -> Rotation {
+  // odinfmt: disable
+  return Rotation{
+    1,0,0,
+    0,math.cos(theta), -math.sin(theta),
+    0,math.sin(theta), math.cos(theta),
+  }
+  // odinfmt: enable
+}
+
+rotation_matrix_y :: proc(theta: f64) -> Rotation {
+  // odinfmt: disable
+  return Rotation{
+    math.cos(theta),  0, math.sin(theta),
+    0,                1, 0,
+    -math.sin(theta), 0, math.cos(theta)
+  }
+  // odinfmt: enable
+}
+
+rotation_matrix_z :: proc(theta: f64) -> Rotation {
+  // odinfmt: disable
+  return Rotation{
+    math.cos(theta), -math.sin(theta), 0,
+    math.sin(theta), math.cos(theta),  0,
+    0,               0,                1
+  }
+  // odinfmt: enable
+}
+
+matrix_mult :: proc(l, r: Rotation) -> Rotation {
+  return Rotation {
+    l[0] * r[0] + l[1] * r[3] + l[2] * r[6],
+    l[0] * r[1] + l[1] * r[4] + l[2] * r[7],
+    l[0] * r[2] + l[1] * r[5] + l[2] * r[8],
+    l[3] * r[0] + l[4] * r[3] + l[5] * r[6],
+    l[3] * r[1] + l[4] * r[4] + l[5] * r[7],
+    l[3] * r[2] + l[4] * r[5] + l[5] * r[8],
+    l[6] * r[0] + l[7] * r[3] + l[8] * r[6],
+    l[6] * r[1] + l[7] * r[4] + l[8] * r[7],
+    l[6] * r[2] + l[7] * r[5] + l[8] * r[8],
+  }
+}
+
 exit_with_prejudice :: proc(text: string, args: ..any, exit_code := 1) {
   fmt.eprintfln(text, ..args)
   os.exit(exit_code)
@@ -47,6 +99,40 @@ edge_function_constants :: proc(a, b: [2]f64) -> (dx, dy, cst: f64) {
   return
 }
 
+move :: proc(vertex: ^Vertex, vector: Vec3) {
+  vertex.x += vector.x
+  vertex.y += vector.y
+  vertex.z += vector.z
+}
+
+rotate :: proc(vertex: ^Vertex, rotation: Rotation) {
+  v : Vertex = ---
+  v.x = rotation[0] * vertex.x + rotation[1] * vertex.y + rotation[2] * vertex.z
+  v.y = rotation[3] * vertex.x + rotation[4] * vertex.y + rotation[5] * vertex.z
+  v.z = rotation[6] * vertex.x + rotation[7] * vertex.y + rotation[8] * vertex.z
+  vertex^ = v
+}
+
+transform :: proc(buffer: ^[]Triangle, object: Object) {
+  assert(len(buffer) >= len(object.triangles))
+
+  for tri_idx, idx in object.triangles {
+    t := &buffer[idx]
+
+    t.x = object.position[tri_idx.x]
+    t.y = object.position[tri_idx.y]
+    t.z = object.position[tri_idx.z]
+
+    rotate(&t.x, object.rotation)
+    rotate(&t.y, object.rotation)
+    rotate(&t.z, object.rotation)
+
+    move(&t.x, object.translation)
+    move(&t.y, object.translation)
+    move(&t.z, object.translation)
+  }
+}
+
 rasterize :: proc(
   triangles: []Triangle,
   colors: []Triangle_Colors,
@@ -69,7 +155,7 @@ rasterize :: proc(
     tl_x := f64(box[0].x) + .5
     tl_y := f64(box[0].y) + .5
 
-    area := edge_function(a.x, a.y, b, c)
+    area := edge_function(a.x, a.y, Point(b), Point(c))
     if area == 0 {
       continue
     }
@@ -130,13 +216,13 @@ rasterize :: proc(
 }
 
 project_point :: #force_inline proc(
-  point: Point,
+  point: Vertex,
   f: f64,
   hw: f64,
   hh: f64,
   iar: f64,
 ) -> (
-  projected: Point,
+  projected: Vertex,
 ) {
   over_z := 1. / point.z
   projected.x = (1 + (point.x * f * over_z * iar)) * hw
@@ -207,20 +293,26 @@ main :: proc() {
   fw := f64(opts.width)
   fh := f64(opts.height)
 
-  cube, err := new_cube()
+  err: mem.Allocator_Error
+  cube: Object
+  cube.mesh, err = new_cube()
+  cube.translation.z = 2.
+  cube.rotation = matrix_mult(matrix_mult(rotation_matrix_y(math.PI / 3.), rotation_matrix_x(math.PI / 10)), rotation_matrix_z(math.PI / 10))
 
-  triangles: [3]Triangle = {
-    {{-0.1, -0.1, 1.}, {0.1, -0.1, 1.}, {0., 0.1, 1.}},
-    {{-0.5, -0.5, 3.}, {0.5, -0.5, 3.}, {0., 0.5, 3.}},
-    {{-0.5, -0.5, 1.}, {0.5, -0.5, 1.}, {0., 0.5, 4.}},
-  }
+  triangles := make([dynamic]Triangle, len(cube.triangles), len(cube.triangles))[:]
+  defer delete(triangles)
+  transform(&triangles, cube)
+
+  if err != .None { return }
 
   projection : []Triangle
   projection, err = project(triangles[:], 1.57, fw, fh)
+  if err != .None { return }
   defer delete(projection)
 
   depth_buffer := make([dynamic]f64, size, size)
   defer delete(depth_buffer)
+
   colors := create_cube_colors({RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA})
   rasterize(projection, colors[:], depth_buffer[:], opts.width, opts.height, output[:])
 
