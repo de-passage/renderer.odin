@@ -13,14 +13,6 @@ Options :: struct {
   output:       ^os.File `args:"file=cw"`,
 }
 
-RGB :: distinct [3]u8
-Vec3 :: [3]f64
-Point :: distinct Vec3
-Vertex :: distinct Point
-Triangle :: [3]Point
-Triangle_Colors :: [3]Vec3
-Box :: [2][2]int
-
 exit_with_prejudice :: proc(text: string, args: ..any, exit_code := 1) {
   fmt.eprintfln(text, ..args)
   os.exit(exit_code)
@@ -137,7 +129,15 @@ rasterize :: proc(
   }
 }
 
- project_point :: #force_inline proc(point: Point, f: f64, hw: f64, hh: f64, iar: f64) -> (projected: Point) {
+project_point :: #force_inline proc(
+  point: Point,
+  f: f64,
+  hw: f64,
+  hh: f64,
+  iar: f64,
+) -> (
+  projected: Point,
+) {
   over_z := 1. / point.z
   projected.x = (1 + (point.x * f * over_z * iar)) * hw
   projected.y = (1 - (point.y * f * over_z)) * hh
@@ -147,14 +147,16 @@ rasterize :: proc(
 
 project :: proc(
   triangles: []Triangle,
-  f: f64,
+  fov: f64,
   width: f64,
   height: f64,
   allocator := context.allocator,
 ) -> (
   output: []Triangle,
+  err: mem.Allocator_Error,
 ) {
-  output = make([]Triangle, len(triangles), allocator)
+  f := 1. / math.tan(fov / 2.)
+  output = make([]Triangle, len(triangles), allocator) or_return
 
   inverse_aspect := height / width
   half_width := width / 2.
@@ -164,7 +166,7 @@ project :: proc(
     o := &output[current_index]
     if triangle.x.z < 0.1 || triangle.y.z < 0.1 || triangle.z.z < 0.1 {
       // current triangle becomes completely 0, will not show in final result
-      o^ = Triangle{{0.,0.,0.},{0.,0.,0.},{0.,0.,0.}}
+      o^ = Triangle{{0., 0., 0.}, {0., 0., 0.}, {0., 0., 0.}}
       continue
     }
     o.x = project_point(triangle.x, f, half_width, half_height, inverse_aspect)
@@ -201,33 +203,25 @@ main :: proc() {
   size := opts.width * opts.height
   output := make([dynamic]RGB, size, size)
   defer delete(output)
-  depth_buffer := make([dynamic]f64, size, size)
-  defer delete(depth_buffer)
 
   fw := f64(opts.width)
   fh := f64(opts.height)
-  colors: [3]Triangle_Colors = {
-    {{1., 0., 0.}, {0., 1., 0.}, {0., 0., 1.}},
-    {{1., 1., 1.}, {1., 1., 1.}, {1., 1., 0.}},
-    {{1., 0., 0.}, {1., 0., 0.}, {1., 0., 0.}},
-  }
+
+  cube, err := new_cube()
+
   triangles: [3]Triangle = {
     {{-0.1, -0.1, 1.}, {0.1, -0.1, 1.}, {0., 0.1, 1.}},
     {{-0.5, -0.5, 3.}, {0.5, -0.5, 3.}, {0., 0.5, 3.}},
     {{-0.5, -0.5, 1.}, {0.5, -0.5, 1.}, {0., 0.5, 4.}},
   }
 
-  projection := project(triangles[:], 1., fw, fh) // inverse aspect ratio
+  projection : []Triangle
+  projection, err = project(triangles[:], 1.57, fw, fh)
   defer delete(projection)
 
-  /* absolute coordintates
-  projection: [3]Triangle = {
-    {{fw * 0.5, fh * 0.2, .9}, {fw * 0.2, fh * 0.7, .9}, {fw * 0.8, fh * 0.8, .9}},
-    {{fw * 0.5, fh * 0.5, 0.1}, {fw * 1., fh * 0.1, 0.1}, {fw * 1., fh * 0.9, 0.1}},
-    {{fw * 0.2, fh * 0.5, 1.}, {fw * 0.4, fh * 0.5, 1.}, {fw * 1., fh * 0.5, 1.}}, // should not render (colinear)
-  }
-    */
-
+  depth_buffer := make([dynamic]f64, size, size)
+  defer delete(depth_buffer)
+  colors := create_cube_colors({RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA})
   rasterize(projection, colors[:], depth_buffer[:], opts.width, opts.height, output[:])
 
   file := opts.output
