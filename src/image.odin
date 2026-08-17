@@ -4,13 +4,16 @@ import "core:fmt"
 import "core:math"
 import "core:mem"
 import "core:os"
+import "vendor:x11/xlib"
+
+quited := false
 
 Camera :: struct {
   position: Vec3,
   orientation: Rotation,
 }
 
-run :: proc(width, height: int, allocator := context.allocator) -> (output: []RGB, err: mem.Allocator_Error) {
+run :: proc(width, height: int, output: []RGB, allocator := context.allocator) -> (err: mem.Allocator_Error) {
 
   size := height * width
   fw := f64(width)
@@ -41,7 +44,6 @@ run :: proc(width, height: int, allocator := context.allocator) -> (output: []RG
 
   colors := create_cube_colors({RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA})
 
-  output = make_slice([]RGB, size, allocator)
   rasterize(projection, colors[:], depth_buffer, width, height, output)
 
   return
@@ -49,14 +51,82 @@ run :: proc(width, height: int, allocator := context.allocator) -> (output: []RG
 
 main :: proc() {
   opts := parse_options()
-  output, err := run(opts.width, opts.height, context.allocator)
-  defer delete(output, context.allocator)
 
+  file := opts.output
+  width := u32(opts.width)
+  height := u32(opts.height)
+
+  display := xlib.OpenDisplay(nil)
+  if display == nil {
+    exit_with_prejudice("Failed to open display")
+  }
+  defer xlib.CloseDisplay(display)
+
+  root := xlib.DefaultRootWindow(display)
+  if root == xlib.None {
+    exit_with_prejudice("No root window found")
+  }
+
+  window := xlib.CreateSimpleWindow(display, root, 0, 0, width, height, 0, 0, 0xffffffff)
+  if (window == xlib.None) {
+    exit_with_prejudice("Failed to create window")
+  }
+
+  xlib.SelectInput(display, window, {.Exposure})
+  xlib.MapWindow(display, window)
+
+  closeWindowMessage := xlib.InternAtom(display, "WM_DELETE_WINDOW", false)
+  xlib.SetWMProtocols(display, window, &closeWindowMessage, 1)
+
+  screen := xlib.DefaultScreen(display)
+  depth := xlib.DefaultDepth(display, screen)
+  visual := xlib.DefaultVisual(display, screen)
+
+  frame_buffer, err := make_slice([]RGB, opts.width * opts.height)
   if err != .None {
     exit_with_prejudice("Failed to allocate enough memory: ", err)
   }
+  defer delete(frame_buffer)
 
-  file := opts.output
-  fmt.fprintf(file, "P6\n%i %i\n255\n", opts.width, opts.height)
-  os.write(file, mem.slice_to_bytes(output[:]))
+  image := xlib.CreateImage(
+    display,
+    visual,
+    u32(depth),
+    .ZPixmap,
+    0,
+    &frame_buffer[0],
+    width,
+    height,
+    32,
+    0,
+  )
+  if image == nil {
+    exit_with_prejudice("Failed to create image")
+  }
+  defer {
+    image.data = nil
+    xlib.DestroyImage(image)
+  }
+
+  gc := xlib.DefaultGC(display, screen)
+
+  event: xlib.XEvent
+  for !quited {
+    xlib.NextEvent(display, &event)
+
+    #partial switch event.type {
+    case .Expose:
+      if event.xexpose.count == 0 {
+        err = run(opts.width, opts.height, frame_buffer)
+        image.data = &frame_buffer[0]
+        xlib.PutImage(display, window, gc, image, 0, 0, 0, 0, width, height)
+      }
+    case .ClientMessage:
+      if event.xclient.data.l[0] == int(closeWindowMessage) {
+        xlib.DestroyWindow(display, window)
+        quited = true
+      }
+    }
+  }
+
 }

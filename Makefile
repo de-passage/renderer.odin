@@ -1,9 +1,11 @@
-.PHONY: all
+.PHONY: all run run-x
 
 TARGET_IMAGE = test.ppm
 SOURCES = $(shell find . -name "*.odin")
 
-all: $(TARGET_IMAGE)
+all: run
+
+run: $(TARGET_IMAGE)
 	./test.bash "$(TARGET_IMAGE)"
 
 $(TARGET_IMAGE): $(SOURCES)

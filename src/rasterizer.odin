@@ -94,9 +94,10 @@ rasterize :: proc(
             color := colors[t]
 
             frame_buffer[coord] = {
-              u8((wa * color[0].r + wb * color[1].r + wc * color[2].r) * 255),
-              u8((wa * color[0].g + wb * color[1].g + wc * color[2].g) * 255),
               u8((wa * color[0].b + wb * color[1].b + wc * color[2].b) * 255),
+              u8((wa * color[0].g + wb * color[1].g + wc * color[2].g) * 255),
+              u8((wa * color[0].r + wb * color[1].r + wc * color[2].r) * 255),
+              0,
             }
           }
         }

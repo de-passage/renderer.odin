@@ -1,3 +1,4 @@
 *.ppm
 *.bin
 core
+.*/

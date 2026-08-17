@@ -2,7 +2,7 @@ package renderer
 
 Triangle_Index :: distinct [3]int
 
-RGB :: distinct [3]u8
+RGB :: distinct [4]u8
 fRGB :: distinct [3]f64
 Vec3 :: [3]f64
 Point :: distinct Vec3
