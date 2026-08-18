@@ -10,15 +10,13 @@ import "vendor:x11/xlib"
 quited := false
 
 MOVEMENT_OFFSET :: .03
-ROTATION_ANGLE :: math.PI / 500
+ROTATION_ANGLE :: math.PI / 200
 TARGET_FPS :: 60.
 FRAME_DURATION :: time.Second / TARGET_FPS
 
 Camera :: struct {
   position:    Vec3,
-  yaw: f64,
-  pitch: f64,
-  roll: f64,
+  orientation: Rotation,
 }
 
 render :: proc(
@@ -47,9 +45,9 @@ render :: proc(
   triangles := (make_slice([]Triangle, len(cube.triangles), allocator) or_return)[:]
   defer delete(triangles, allocator)
 
-  transform(&triangles, cube, camera.position, transpose(rotation_matrix(camera.yaw, camera.pitch, camera.roll)))
+  transform(&triangles, cube, camera.position, transpose(camera.orientation))
 
-  projection := project(triangles[:], 1.57, fw, fh, allocator) or_return
+  projection := project(triangles[:], 1, fw, fh, allocator) or_return
   defer delete(projection, allocator)
 
   depth_buffer := make_slice([]f64, size, allocator) or_return
@@ -76,6 +74,11 @@ XLib_State :: struct {
   f_code:             xlib.KeyCode,
   x_code:             xlib.KeyCode,
   c_code:             xlib.KeyCode,
+
+  // Cache
+  x_rotation: Rotation,
+  y_rotation: Rotation,
+  z_rotation: Rotation,
 }
 
 fill_keysyms :: proc(state: ^XLib_State) {
@@ -126,11 +129,26 @@ handle_window_event :: proc(
     }
   }
 
-  rotation := rotation_matrix(camera.yaw, camera.pitch, camera.roll)
+  if keys[state.r_code] {
+    needs_render = true
+    camera.orientation = matrix_mult(camera.orientation, state.x_rotation)
+  }
+  if keys[state.f_code] {
+    needs_render = true
+    camera.orientation = matrix_mult(camera.orientation, transpose(state.x_rotation))
+  }
+  if keys[state.q_code] {
+    needs_render = true
+    camera.orientation = matrix_mult(camera.orientation, state.y_rotation)
+  }
+  if keys[state.e_code] {
+    needs_render = true
+    camera.orientation = matrix_mult(camera.orientation, transpose(state.y_rotation))
+  }
 
-  x_movement := rotate(&Vec3{MOVEMENT_OFFSET, 0, 0}, rotation)
-  y_movement := rotate(&Vec3{0, MOVEMENT_OFFSET, 0}, rotation)
-  z_movement := rotate(&Vec3{0, 0, MOVEMENT_OFFSET}, rotation)
+  x_movement := rotate(&Vec3{MOVEMENT_OFFSET, 0, 0}, camera.orientation)
+  y_movement := rotate(&Vec3{0, MOVEMENT_OFFSET, 0}, camera.orientation)
+  z_movement := rotate(&Vec3{0, 0, MOVEMENT_OFFSET}, camera.orientation)
   if keys[state.a_code] {
     needs_render = true
     camera.position -= x_movement
@@ -155,29 +173,16 @@ handle_window_event :: proc(
     needs_render = true
     camera.position += y_movement
   }
-  if keys[state.r_code] {
-    needs_render = true
-    camera.pitch -= ROTATION_ANGLE
-  }
-  if keys[state.f_code] {
-    needs_render = true
-    camera.pitch += ROTATION_ANGLE
-  }
-  if keys[state.q_code] {
-    needs_render = true
-    camera.yaw -= ROTATION_ANGLE
-  }
-  if keys[state.e_code] {
-    needs_render = true
-    camera.yaw += ROTATION_ANGLE
-  }
+
   return true
 }
 
 main :: proc() {
   opts := parse_options()
 
-  camera := Camera { }
+  camera := Camera {
+    orientation = ZERO_ROTATION
+  }
 
   file := opts.output
   width := u32(opts.width)
@@ -241,12 +246,10 @@ main :: proc() {
 
   gc := xlib.DefaultGC(display, screen)
 
-  y_rotation := rotation_matrix_y(ROTATION_ANGLE)
-  x_rotation := rotation_matrix_x(ROTATION_ANGLE)
-  y_rotation_inv := rotation_matrix_y(-ROTATION_ANGLE)
-  x_rotation_inv := rotation_matrix_x(-ROTATION_ANGLE)
-
   fill_keysyms(&xlibState)
+  xlibState.y_rotation = rotation_matrix_y(ROTATION_ANGLE)
+  xlibState.z_rotation = rotation_matrix_z(ROTATION_ANGLE)
+  xlibState.x_rotation = rotation_matrix_x(ROTATION_ANGLE)
 
   event: xlib.XEvent
   keys: [256]bool
