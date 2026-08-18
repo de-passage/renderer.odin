@@ -9,18 +9,19 @@ move :: proc(vertex: ^Vertex, vector: Vec3) {
   vertex.z += vector.z
 }
 
-rotate :: proc(vertex: ^Vertex, rotation: Rotation) {
+rotate :: proc(vertex: ^Vertex, rotation: Rotation) -> Vertex {
   v : Vertex = ---
-  v.x = rotation[0] * vertex.x + rotation[1] * vertex.y + rotation[2] * vertex.z
-  v.y = rotation[3] * vertex.x + rotation[4] * vertex.y + rotation[5] * vertex.z
-  v.z = rotation[6] * vertex.x + rotation[7] * vertex.y + rotation[8] * vertex.z
+  #no_bounds_check v.x = rotation[0] * vertex.x + rotation[1] * vertex.y + rotation[2] * vertex.z
+  #no_bounds_check v.y = rotation[3] * vertex.x + rotation[4] * vertex.y + rotation[5] * vertex.z
+  #no_bounds_check v.z = rotation[6] * vertex.x + rotation[7] * vertex.y + rotation[8] * vertex.z
   vertex^ = v
+  return vertex^
 }
 
 transform :: proc(buffer: ^[]Triangle, object: Object, camera_position: Vec3, camera_rotation: Rotation) -> []Triangle {
   assert(len(buffer) >= len(object.triangles))
 
-  for tri_idx, idx in object.triangles {
+  #no_bounds_check for tri_idx, idx in object.triangles {
     t := &buffer[idx]
 
     t.x = object.position[tri_idx.x]
@@ -76,7 +77,7 @@ project :: proc(
   half_width := width / 2.
   half_height := height / 2.
 
-  for triangle, current_index in triangles {
+  #no_bounds_check for triangle, current_index in triangles {
     o := &output[current_index]
     if triangle.x.z < 0.1 || triangle.y.z < 0.1 || triangle.z.z < 0.1 {
       // current triangle becomes completely 0, will not show in final result

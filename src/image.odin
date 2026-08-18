@@ -4,16 +4,31 @@ import "core:fmt"
 import "core:math"
 import "core:mem"
 import "core:os"
+import "core:time"
 import "vendor:x11/xlib"
 
 quited := false
 
+MOVEMENT_OFFSET :: .03
+ROTATION_ANGLE :: math.PI / 500
+TARGET_FPS :: 60.
+FRAME_DURATION :: time.Second / TARGET_FPS
+
 Camera :: struct {
-  position: Vec3,
-  orientation: Rotation,
+  position:    Vec3,
+  yaw: f64,
+  pitch: f64,
+  roll: f64,
 }
 
-run :: proc(width, height: int, output: []RGB, allocator := context.allocator) -> (err: mem.Allocator_Error) {
+render :: proc(
+  width, height: int,
+  output: []RGB,
+  camera: Camera,
+  allocator := context.allocator,
+) -> (
+  err: mem.Allocator_Error,
+) {
 
   size := height * width
   fw := f64(width)
@@ -24,17 +39,15 @@ run :: proc(width, height: int, output: []RGB, allocator := context.allocator) -
   defer release_mesh(&cube.mesh, allocator)
 
   cube.translation.z = 2.
-  cube.rotation = matrix_mult(matrix_mult(rotation_matrix_y(math.PI / 3.), rotation_matrix_x(math.PI / 10)), rotation_matrix_z(math.PI / 10))
+  cube.rotation = matrix_mult(
+    matrix_mult(rotation_matrix_y(math.PI / 3.), rotation_matrix_x(math.PI / 10)),
+    rotation_matrix_z(math.PI / 10),
+  )
 
   triangles := (make_slice([]Triangle, len(cube.triangles), allocator) or_return)[:]
   defer delete(triangles, allocator)
 
-  camera:= Camera{
-    position = Vec3{0.7, -0.1, 0.5},
-    orientation = matrix_mult( rotation_matrix_x(math.PI / 12), rotation_matrix_y(math.PI / 10))
-  }
-
-  transform(&triangles, cube, camera.position, transpose(camera.orientation))
+  transform(&triangles, cube, camera.position, transpose(rotation_matrix(camera.yaw, camera.pitch, camera.roll)))
 
   projection := project(triangles[:], 1.57, fw, fh, allocator) or_return
   defer delete(projection, allocator)
@@ -49,8 +62,122 @@ run :: proc(width, height: int, output: []RGB, allocator := context.allocator) -
   return
 }
 
+XLib_State :: struct {
+  display:            ^xlib.Display,
+  event:              xlib.XEvent,
+  closeWindowMessage: xlib.Atom,
+  a_code:             xlib.KeyCode,
+  w_code:             xlib.KeyCode,
+  s_code:             xlib.KeyCode,
+  d_code:             xlib.KeyCode,
+  q_code:             xlib.KeyCode,
+  e_code:             xlib.KeyCode,
+  r_code:             xlib.KeyCode,
+  f_code:             xlib.KeyCode,
+  x_code:             xlib.KeyCode,
+  c_code:             xlib.KeyCode,
+}
+
+fill_keysyms :: proc(state: ^XLib_State) {
+  state.a_code = xlib.KeysymToKeycode(state.display, .XK_a)
+  state.w_code = xlib.KeysymToKeycode(state.display, .XK_w)
+  state.s_code = xlib.KeysymToKeycode(state.display, .XK_s)
+  state.d_code = xlib.KeysymToKeycode(state.display, .XK_d)
+  state.q_code = xlib.KeysymToKeycode(state.display, .XK_q)
+  state.e_code = xlib.KeysymToKeycode(state.display, .XK_e)
+  state.r_code = xlib.KeysymToKeycode(state.display, .XK_r)
+  state.f_code = xlib.KeysymToKeycode(state.display, .XK_f)
+  state.x_code = xlib.KeysymToKeycode(state.display, .XK_x)
+  state.c_code = xlib.KeysymToKeycode(state.display, .XK_c)
+}
+
+handle_window_event :: proc(
+  camera: ^Camera,
+  keys: ^[256]bool,
+  state: XLib_State,
+  elapsed: time.Duration,
+) -> (
+  needs_render: bool,
+) {
+  display := state.display
+  event := state.event
+  needs_render = false
+  for xlib.Pending(display) > 0 {
+    xlib.NextEvent(display, &event)
+
+    #partial switch event.type {
+    case .Expose:
+      if event.xexpose.count == 0 {
+        needs_render = true
+      }
+    case .ClientMessage:
+      if event.xclient.data.l[0] == int(state.closeWindowMessage) {
+        quited = true
+        break
+      }
+    case .KeyPress:
+      keys[event.xkey.keycode] = true
+    case .KeyRelease:
+      if xlib.LookupKeysym(&event.xkey, 0) == .XK_Escape {
+        quited = true
+        break
+      }
+      keys[event.xkey.keycode] = false
+    }
+  }
+
+  rotation := rotation_matrix(camera.yaw, camera.pitch, camera.roll)
+
+  x_movement := rotate(&Vec3{MOVEMENT_OFFSET, 0, 0}, rotation)
+  y_movement := rotate(&Vec3{0, MOVEMENT_OFFSET, 0}, rotation)
+  z_movement := rotate(&Vec3{0, 0, MOVEMENT_OFFSET}, rotation)
+  if keys[state.a_code] {
+    needs_render = true
+    camera.position -= x_movement
+  }
+  if keys[state.w_code] {
+    needs_render = true
+    camera.position += z_movement
+  }
+  if keys[state.s_code] {
+    needs_render = true
+    camera.position -= z_movement
+  }
+  if keys[state.d_code] {
+    needs_render = true
+    camera.position += x_movement
+  }
+  if keys[state.x_code] {
+    needs_render = true
+    camera.position -= y_movement
+  }
+  if keys[state.c_code] {
+    needs_render = true
+    camera.position += y_movement
+  }
+  if keys[state.r_code] {
+    needs_render = true
+    camera.pitch -= ROTATION_ANGLE
+  }
+  if keys[state.f_code] {
+    needs_render = true
+    camera.pitch += ROTATION_ANGLE
+  }
+  if keys[state.q_code] {
+    needs_render = true
+    camera.yaw -= ROTATION_ANGLE
+  }
+  if keys[state.e_code] {
+    needs_render = true
+    camera.yaw += ROTATION_ANGLE
+  }
+  return true
+}
+
 main :: proc() {
   opts := parse_options()
+
+  camera := Camera { }
 
   file := opts.output
   width := u32(opts.width)
@@ -72,11 +199,15 @@ main :: proc() {
     exit_with_prejudice("Failed to create window")
   }
 
-  xlib.SelectInput(display, window, {.Exposure})
+  xlib.SelectInput(display, window, {.Exposure, .KeyPress, .KeyRelease})
   xlib.MapWindow(display, window)
 
-  closeWindowMessage := xlib.InternAtom(display, "WM_DELETE_WINDOW", false)
-  xlib.SetWMProtocols(display, window, &closeWindowMessage, 1)
+  xlibState := XLib_State {
+    display = display,
+  }
+
+  xlibState.closeWindowMessage = xlib.InternAtom(display, "WM_DELETE_WINDOW", false)
+  xlib.SetWMProtocols(display, window, &xlibState.closeWindowMessage, 1)
 
   screen := xlib.DefaultScreen(display)
   depth := xlib.DefaultDepth(display, screen)
@@ -110,23 +241,39 @@ main :: proc() {
 
   gc := xlib.DefaultGC(display, screen)
 
-  event: xlib.XEvent
-  for !quited {
-    xlib.NextEvent(display, &event)
+  y_rotation := rotation_matrix_y(ROTATION_ANGLE)
+  x_rotation := rotation_matrix_x(ROTATION_ANGLE)
+  y_rotation_inv := rotation_matrix_y(-ROTATION_ANGLE)
+  x_rotation_inv := rotation_matrix_x(-ROTATION_ANGLE)
 
-    #partial switch event.type {
-    case .Expose:
-      if event.xexpose.count == 0 {
-        err = run(opts.width, opts.height, frame_buffer)
-        image.data = &frame_buffer[0]
-        xlib.PutImage(display, window, gc, image, 0, 0, 0, 0, width, height)
+  fill_keysyms(&xlibState)
+
+  event: xlib.XEvent
+  keys: [256]bool
+  last:= time.now()
+  for !quited {
+    start := time.now()
+
+    tainted := handle_window_event(&camera, &keys, xlibState, time.diff(last, start))
+    last := time.now()
+
+    if tainted {
+      mem.zero_slice(frame_buffer)
+      err = render(opts.width, opts.height, frame_buffer, camera)
+      if err != .None {
+        exit_with_prejudice("Allocation failed")
       }
-    case .ClientMessage:
-      if event.xclient.data.l[0] == int(closeWindowMessage) {
-        xlib.DestroyWindow(display, window)
-        quited = true
-      }
+      image.data = &frame_buffer[0]
+      xlib.PutImage(display, window, gc, image, 0, 0, 0, 0, width, height)
+    }
+
+    end := time.since(start)
+    if end < FRAME_DURATION {
+      time.accurate_sleep(FRAME_DURATION - end)
+    } else {
+      fmt.eprintln("Missed frame by ", end - FRAME_DURATION)
     }
   }
+  xlib.DestroyWindow(display, window)
 
 }
