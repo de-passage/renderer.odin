@@ -13,8 +13,8 @@ Cache :: struct {
 
 quited := false
 
-MOVEMENT_OFFSET :: .03
-ROTATION_ANGLE :: math.PI * .005
+MOVEMENT_OFFSET :: .003
+ROTATION_ANGLE :: math.PI * .0005
 TARGET_FPS :: 60.
 FRAME_DURATION :: time.Second / TARGET_FPS
 
@@ -38,6 +38,12 @@ main :: proc() {
     exit_with_prejudice("Failed to allocate enough memory: ", err)
   }
   defer delete(frame_buffer)
+
+  frame_arena_size := opts.width * opts.height * 8 + 1024 * 1024 * 2
+  frame_arena_buffer := make_slice([]byte, frame_arena_size) // Size of the depth buffer + headroom
+  frame_arena: mem.Arena
+  mem.arena_init(&frame_arena, frame_arena_buffer)
+  frame_allocator := mem.arena_allocator(&frame_arena)
 
   image := xlib.CreateImage(
     xlibState.display,
@@ -72,9 +78,13 @@ main :: proc() {
 
     if tainted {
       mem.zero_slice(frame_buffer)
-      err = render(opts.width, opts.height, frame_buffer, camera)
+      err = render(opts.width, opts.height, frame_buffer, camera, frame_allocator)
       if err != .None {
-        exit_with_prejudice("Allocation failed")
+        exit_with_prejudice(
+          "Frame arena exhausted: capacity=%d, peak=%d",
+          len(frame_arena_buffer),
+          frame_arena.peak_used,
+        )
       }
       image.data = &frame_buffer[0]
       xlib.PutImage(
@@ -91,6 +101,7 @@ main :: proc() {
       )
     }
 
+    mem.arena_free_all(&frame_arena)
     end := time.since(start)
     if end < FRAME_DURATION {
       time.accurate_sleep(FRAME_DURATION - end)

@@ -89,5 +89,5 @@ handle_window_event :: proc(
     camera.position += y_movement
   }
 
-  return true
+  return needs_render
 }
