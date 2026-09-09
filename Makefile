@@ -1,17 +1,21 @@
 .PHONY: all build run
 
-SOURCES := $(shell find . -name "*.odin")
+SRC_DIR := src/
+SOURCES := $(shell find $(SRC_DIR) -name "*.odin")
 APP_NAME := renderer
 
-all: build
+all: check
+
+check:
+	odin check $(SRC_DIR)
 
 build: $(APP_NAME)
 
 $(APP_NAME): $(SOURCES)
-	odin build src -out:$(APP_NAME)
+	odin build $(SRC_DIR) -out:$(APP_NAME)
 
 run: $(SOURCES)
-	odin run src -out:$(APP_NAME) -- -width:800 -height:600
+	odin run $(SRC_DIR) -out:$(APP_NAME) -- -width:800 -height:600
 
 debug: $(SOURCES)
-	odin build src -out:$(APP_NAME) -debug
+	odin build $(SRC_DIR) -out:$(APP_NAME) -debug
