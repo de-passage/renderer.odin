@@ -1,8 +1,16 @@
-package renderer
+package x
 
 import "vendor:x11/xlib"
 
-XLib_State :: struct {
+Error :: enum {
+  None,
+  Display_Open_Failed,
+  Window_No_Root,
+  Window_Create_Failed,
+  Extension_Missing,
+}
+
+State :: struct {
   display:            ^xlib.Display,
   event:              xlib.XEvent,
   visual:             ^xlib.Visual,
@@ -23,7 +31,7 @@ XLib_State :: struct {
   c_code:             xlib.KeyCode,
 }
 
-fill_keysyms :: proc(state: ^XLib_State) {
+fill_keysyms :: proc(state: ^State) {
   state.a_code = xlib.KeysymToKeycode(state.display, .XK_a)
   state.w_code = xlib.KeysymToKeycode(state.display, .XK_w)
   state.s_code = xlib.KeysymToKeycode(state.display, .XK_s)
@@ -36,31 +44,34 @@ fill_keysyms :: proc(state: ^XLib_State) {
   state.c_code = xlib.KeysymToKeycode(state.display, .XK_c)
 }
 
-teardown_xlib :: proc(state: XLib_State) {
+teardown_xlib :: proc(state: State) {
   xlib.DestroyWindow(state.display, state.window)
   xlib.CloseDisplay(state.display)
 }
 
-setup_xlib :: proc(width, height: u32) -> (state: XLib_State) {
+setup_xlib :: proc(width, height: u32) -> (state: State, err: Error) {
 
   state.display = xlib.OpenDisplay(nil)
 
   if state.display == nil {
-    exit_with_prejudice("Failed to open display")
+    err = .Display_Open_Failed
+    return
   }
   display := state.display
 
   root := xlib.DefaultRootWindow(display)
   if root == xlib.None {
     xlib.CloseDisplay(display)
-    exit_with_prejudice("No root window found")
+    err = .Window_No_Root
+    return
   }
 
   state.window = xlib.CreateSimpleWindow(display, root, 0, 0, width, height, 0, 0, 0xffffffff)
   window := state.window
   if (window == xlib.None) {
     xlib.CloseDisplay(display)
-    exit_with_prejudice("Failed to create window")
+    err = .Window_Create_Failed
+    return
   }
 
   xlib.SelectInput(display, window, {.Exposure, .KeyPress, .KeyRelease})

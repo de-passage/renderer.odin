@@ -2,10 +2,12 @@ package renderer
 
 import "vendor:x11/xlib"
 
+import "x"
+
 handle_window_event :: proc(
   camera: ^Camera,
   keys: ^[256]bool,
-  state: XLib_State,
+  state: x.State,
   elapsed: f64,
 ) -> (
   needs_render: bool,

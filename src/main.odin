@@ -7,8 +7,10 @@ import "core:os"
 import "core:time"
 import "vendor:x11/xlib"
 
+import "x"
+
 Cache :: struct {
-  xlibState: XLib_State,
+  xlibState: x.State,
 }
 
 quited := false
@@ -30,8 +32,19 @@ main :: proc() {
   width := u32(opts.width)
   height := u32(opts.height)
 
-  xlibState := setup_xlib(width, height)
-  defer teardown_xlib(xlibState)
+  xlibState, xerr := x.setup_xlib(width, height)
+  switch xerr {
+  case .None:
+  case .Display_Open_Failed:
+    exit_with_prejudice("Failed to open X Display")
+  case .Window_No_Root:
+    exit_with_prejudice("Failed to find X root window")
+  case .Window_Create_Failed:
+    exit_with_prejudice("Failed to create X Window")
+  case .Extension_Missing:
+    exit_with_prejudice("Extension missing")
+  }
+  defer x.teardown_xlib(xlibState)
 
   frame_buffer, err := make_slice([]RGB, opts.width * opts.height)
   if err != .None {
