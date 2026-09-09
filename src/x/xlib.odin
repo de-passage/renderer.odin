@@ -59,6 +59,11 @@ setup_xlib :: proc(width, height: u32) -> (state: State, err: Error) {
   }
   display := state.display
 
+  if !XShmQueryExtension(display) {
+    err = .Extension_Missing
+    return
+  }
+
   root := xlib.DefaultRootWindow(display)
   if root == xlib.None {
     xlib.CloseDisplay(display)
