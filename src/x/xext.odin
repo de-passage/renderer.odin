@@ -13,6 +13,7 @@ foreign Xext {
   Attach :: proc "c" (display: ^xlib.Display, shminfo: ^SegmentInfo) -> b32 ---
   Detach :: proc "c" (display: ^xlib.Display, shminfo: ^SegmentInfo) -> xlib.Status ---
   PutImage :: proc "c" (display: ^xlib.Display, drawable: xlib.Drawable, gc: xlib.GC, image: ^xlib.XImage, src_x, src_y, dest_x, dest_y: i32, width, height: u32, send_event: b32) -> xlib.Status ---
+  GetEventBase :: proc "c" (display: ^xlib.Display) -> i32 ---
 }
 
 ShmSeg :: distinct xlib.XID

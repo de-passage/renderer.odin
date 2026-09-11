@@ -29,6 +29,7 @@ State :: struct {
   f_code:             xlib.KeyCode,
   x_code:             xlib.KeyCode,
   c_code:             xlib.KeyCode,
+  completion_type:    i32,
 }
 
 fill_keysyms :: proc(state: ^State) {
@@ -79,6 +80,7 @@ setup_xlib :: proc(width, height: u32) -> (state: State, err: Error) {
     return
   }
 
+  state.completion_type = GetEventBase(state.display)
   xlib.SelectInput(display, window, {.Exposure, .KeyPress, .KeyRelease})
   xlib.MapWindow(display, window)
 
