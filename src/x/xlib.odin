@@ -59,7 +59,7 @@ setup_xlib :: proc(width, height: u32) -> (state: State, err: Error) {
   }
   display := state.display
 
-  if !XShmQueryExtension(display) {
+  if !QueryExtension(display) {
     err = .Extension_Missing
     return
   }
