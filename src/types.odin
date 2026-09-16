@@ -11,3 +11,10 @@ Triangle :: [3]Vertex
 Triangle_Colors :: [3]fRGB
 Box :: [2][2]int
 Rotation :: distinct [9]f64
+
+Rich_Triangle :: struct {
+  vertices: Triangle,
+  colors: Triangle_Colors,
+}
+
+Triangle_List :: #soa []Rich_Triangle

@@ -10,7 +10,7 @@ move :: proc(vertex: ^Vertex, vector: Vec3) {
 }
 
 rotate :: proc(vertex: ^Vertex, rotation: Rotation) -> Vertex {
-  v : Vertex = ---
+  v: Vertex = ---
   #no_bounds_check v.x = rotation[0] * vertex.x + rotation[1] * vertex.y + rotation[2] * vertex.z
   #no_bounds_check v.y = rotation[3] * vertex.x + rotation[4] * vertex.y + rotation[5] * vertex.z
   #no_bounds_check v.z = rotation[6] * vertex.x + rotation[7] * vertex.y + rotation[8] * vertex.z
@@ -18,7 +18,12 @@ rotate :: proc(vertex: ^Vertex, rotation: Rotation) -> Vertex {
   return vertex^
 }
 
-transform :: proc(buffer: ^[]Triangle, object: Object, camera_position: Vec3, camera_rotation: Rotation) -> []Triangle {
+transform :: proc(
+  buffer: ^[]Triangle,
+  object: Object,
+  camera_position: Vec3,
+  camera_rotation: Rotation,
+) -> []Triangle {
   assert(len(buffer) >= len(object.triangles))
 
   #no_bounds_check for tri_idx, idx in object.triangles {
@@ -61,33 +66,38 @@ project_point :: #force_inline proc(
 }
 
 project :: proc(
-  triangles: []Triangle,
+  triangles: Triangle_List,
   fov: f64,
   width: f64,
   height: f64,
   allocator := context.allocator,
 ) -> (
-  output: []Triangle,
+  output: Triangle_List,
   err: mem.Allocator_Error,
 ) {
   f := 1. / math.tan(fov / 2.)
-  output = make([]Triangle, len(triangles), allocator) or_return
+  output = make(Triangle_List, len(triangles) * 2, allocator) or_return
 
   inverse_aspect := height / width
   half_width := width / 2.
   half_height := height / 2.
 
-  #no_bounds_check for triangle, current_index in triangles {
+  current_index := 0
+  #no_bounds_check for data in triangles {
+    triangle := data.vertices
     o := &output[current_index]
     if triangle.x.z < 0.1 || triangle.y.z < 0.1 || triangle.z.z < 0.1 {
       // current triangle becomes completely 0, will not show in final result
-      o^ = Triangle{{0., 0., 0.}, {0., 0., 0.}, {0., 0., 0.}}
       continue
     }
-    o.x = project_point(triangle.x, f, half_width, half_height, inverse_aspect)
-    o.y = project_point(triangle.y, f, half_width, half_height, inverse_aspect)
-    o.z = project_point(triangle.z, f, half_width, half_height, inverse_aspect)
+    o.vertices.x = project_point(triangle.x, f, half_width, half_height, inverse_aspect)
+    o.vertices.y = project_point(triangle.y, f, half_width, half_height, inverse_aspect)
+    o.vertices.z = project_point(triangle.z, f, half_width, half_height, inverse_aspect)
+    o.colors = data.colors
+    current_index += 1
   }
+
+  output = output[:current_index]
 
   return
 }

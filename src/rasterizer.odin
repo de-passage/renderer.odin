@@ -32,8 +32,7 @@ edge_function_constants :: proc(a, b: [2]f64) -> (dx, dy, cst: f64) {
 }
 
 rasterize :: proc(
-  triangles: []Triangle,
-  colors: []Triangle_Colors,
+  triangles: Triangle_List,
   depth_buffer: []f64,
   width: int,
   height: int,
@@ -42,7 +41,7 @@ rasterize :: proc(
   length := len(triangles)
 
   for t in 0 ..< length {
-    triangle := triangles[t]
+    triangle := triangles[t].vertices
     box := bounding_box(triangle, width, height)
 
     a := triangle[0]
@@ -91,7 +90,7 @@ rasterize :: proc(
           if depth_buffer[coord] < depth {
             depth_buffer[coord] = depth
 
-            color := colors[t]
+            color := triangles[t].colors
 
             frame_buffer[coord] = {
               u8((wa * color[0].b + wb * color[1].b + wc * color[2].b) * 255),

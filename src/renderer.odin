@@ -31,20 +31,22 @@ render :: proc(
     rotation_matrix_z(math.PI / 10),
   )
 
-  triangles := (make_slice([]Triangle, len(cube.triangles), allocator) or_return)[:]
-  defer delete(triangles, allocator)
+  cube_data := (make(Triangle_List, len(cube.triangles), allocator) or_return)
+  triangles, colors := soa_unzip(cube_data)
+
+  cube_colors := create_cube_colors({RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA})
+  copy(colors, cube_colors[:])
+  defer delete(cube_data, allocator)
 
   transform(&triangles, cube, camera.position, transpose(camera.orientation))
 
-  projection := project(triangles[:], 1, fw, fh, allocator) or_return
+  projection := project(cube_data, 1, fw, fh, allocator) or_return
   defer delete(projection, allocator)
 
   depth_buffer := make_slice([]f64, size, allocator) or_return
   defer delete(depth_buffer, allocator)
 
-  colors := create_cube_colors({RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA})
-
-  rasterize(projection, colors[:], depth_buffer, width, height, output)
+  rasterize(projection, depth_buffer, width, height, output)
 
   return
 }
