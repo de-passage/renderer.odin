@@ -83,19 +83,23 @@ rasterize :: proc(
           wa := efxbc * inverse_area
           wb := efxca * inverse_area
           wc := efxab * inverse_area
+          waz := wa * a.z
+          wbz := wb * b.z
+          wcz := wc * c.z
 
-          depth := (wa * triangle[0].z + wb * triangle[1].z + wc * triangle[2].z)
+          depth := (waz + wbz + wcz)
           coord := y * width + x
 
           if depth_buffer[coord] < depth {
             depth_buffer[coord] = depth
+            denom := 255. / depth
 
             color := triangles[t].colors
 
             frame_buffer[coord] = {
-              u8((wa * color[0].b + wb * color[1].b + wc * color[2].b) * 255),
-              u8((wa * color[0].g + wb * color[1].g + wc * color[2].g) * 255),
-              u8((wa * color[0].r + wb * color[1].r + wc * color[2].r) * 255),
+              u8((waz * color[0].b + wbz * color[1].b + wcz * color[2].b) * denom),
+              u8((waz * color[0].g + wbz * color[1].g + wcz * color[2].g) * denom),
+              u8((waz * color[0].r + wbz * color[1].r + wcz * color[2].r) * denom),
               0,
             }
           }

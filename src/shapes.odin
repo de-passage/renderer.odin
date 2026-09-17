@@ -65,3 +65,32 @@ create_cube_colors :: proc(
     {colors[5], colors[5], colors[5]}, {colors[5], colors[5], colors[5]},
   }
 }
+
+new_interpolation_test_pyramid :: proc(
+  allocator := context.allocator,
+) -> (
+  mesh: Mesh,
+  err: mem.Allocator_Error,
+) {
+  points := [5]Vertex {
+    {-0.45, -0.45, -0.45},
+    { 0.45, -0.45, -0.45},
+    {-0.45, -0.45,  0.45},
+    { 0.45, -0.45,  0.45},
+    { 0.00,  0.55,  0.00},
+  }
+  indices := [6]Triangle_Index {
+    {0, 1, 2}, {1, 3, 2},
+    {0, 4, 1}, {1, 4, 3},
+    {3, 4, 2}, {2, 4, 0},
+  }
+  return allocate_mesh_clone(points[:], indices[:], allocator)
+}
+
+create_interpolation_test_colors :: proc() -> [6]Triangle_Colors {
+  return {
+    {RED, GREEN, BLUE}, {GREEN, YELLOW, BLUE},
+    {RED, MAGENTA, GREEN}, {GREEN, MAGENTA, YELLOW},
+    {YELLOW, MAGENTA, BLUE}, {BLUE, MAGENTA, RED},
+  }
+}
