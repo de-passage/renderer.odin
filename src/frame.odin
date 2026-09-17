@@ -15,6 +15,7 @@ Frame :: struct {
 }
 
 Frame_Error :: enum {
+  NONE,
   SHM_ID_FAILED,
   SHM_ALLOC_FAILED,
   SHM_ATTACH_FAILED,
@@ -82,16 +83,18 @@ init_frame :: proc(frame: ^Frame, height, width: u32, xstate: x.State) -> (err: 
 
 delete_frame :: proc(frame: ^Frame, state: x.State) {
   if frame.buffer != nil {
-    x.shmdt(rawptr(&frame.buffer[0]))
-    frame.buffer = nil
-  }
-  if frame.shmid != -1 {
     x.Detach(state.display, &frame.segment_info)
-    x.shmctl(frame.shmid, x.IPC_RMID, nil)
-    frame.shmid = -1
   }
   if frame.image != nil {
     xlib.DestroyImage(frame.image)
     frame.image = nil
+  }
+  if frame.buffer != nil {
+    x.shmdt(rawptr(&frame.buffer[0]))
+    frame.buffer = nil
+  }
+  if frame.shmid != -1 {
+    x.shmctl(frame.shmid, x.IPC_RMID, nil)
+    frame.shmid = -1
   }
 }

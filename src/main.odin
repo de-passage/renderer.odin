@@ -74,6 +74,7 @@ main_impl :: proc(opts: Options) -> string {
         return "Failed to attach shared memory to display"
       case .SHM_IMAGE_FAILED:
         return "Failed to create image"
+      case .NONE:
       }
     }
   }
@@ -97,7 +98,7 @@ main_impl :: proc(opts: Options) -> string {
 
     elapsed := f64(time.diff(last, start)) / f64(time.Second)
     tainted := handle_window_event(&camera, &keys, &state, elapsed)
-    last := time.now()
+    last = time.now()
 
     if tainted || force_redraw {
       frame: ^Frame

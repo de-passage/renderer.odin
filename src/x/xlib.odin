@@ -61,6 +61,7 @@ setup_xlib :: proc(width, height: u32) -> (state: State, err: Error) {
   display := state.display
 
   if !QueryExtension(display) {
+    xlib.CloseDisplay(display)
     err = .Extension_Missing
     return
   }
