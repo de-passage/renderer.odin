@@ -15,8 +15,8 @@ Cache :: struct {
 
 quited := false
 
-MOVEMENT_OFFSET :: .003
-ROTATION_ANGLE :: math.PI * .0005
+MOVEMENT_OFFSET :: .15
+ROTATION_ANGLE :: math.PI * .1
 TARGET_FPS :: 60.
 FRAME_DURATION :: time.Second / TARGET_FPS
 
