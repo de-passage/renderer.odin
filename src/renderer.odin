@@ -1,5 +1,6 @@
 package renderer
 
+import "core:time"
 import "core:mem"
 import "core:math"
 
@@ -12,6 +13,7 @@ render :: proc(
   width, height: int,
   output: []RGB,
   camera: Camera,
+  now: time.Time,
   allocator := context.allocator,
 ) -> (
   err: mem.Allocator_Error,
@@ -25,9 +27,10 @@ render :: proc(
   cube.mesh = new_cube(.7, allocator = allocator) or_return
   defer release_mesh(&cube.mesh, allocator)
 
+  rot_angle := (math.PI * 2.) / 5. * (f64(time.time_to_unix_nano(now)) / f64(time.Second))
   cube.translation = {-0.5, 0, 2.}
   cube.rotation = matrix_mult(
-    matrix_mult(rotation_matrix_y(math.PI / 3.), rotation_matrix_x(math.PI / 10)),
+    matrix_mult(rotation_matrix_y(rot_angle), rotation_matrix_x(math.PI / 10)),
     rotation_matrix_z(math.PI / 10),
   )
 

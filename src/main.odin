@@ -15,7 +15,7 @@ Cache :: struct {
 
 quited := false
 
-MOVEMENT_OFFSET :: .15
+MOVEMENT_OFFSET :: .25
 ROTATION_ANGLE :: math.PI * .1
 TARGET_FPS :: 60.
 FRAME_DURATION :: time.Second / TARGET_FPS
@@ -100,44 +100,42 @@ main_impl :: proc(opts: Options) -> string {
     tainted := handle_window_event(&camera, &keys, &state, elapsed)
     last = time.now()
 
-    if tainted || force_redraw {
-      frame: ^Frame
-      for &f in state.frames {
-        if !f.in_flight {
-          frame = &f
-        }
+    frame: ^Frame
+    for &f in state.frames {
+      if !f.in_flight {
+        frame = &f
       }
-      if frame == nil {
-        // X is too slow, we'll loop until we can get an empty buffer
-        force_redraw = true
-        continue
-      }
+    }
+    if frame == nil {
+      // X is too slow, we'll loop until we can get an empty buffer
+      force_redraw = true
+      continue
+    }
 
-      mem.zero_slice(frame.buffer)
-      err := render(opts.width, opts.height, frame.buffer, camera, frame_allocator)
-      if err != .None {
-        return fmt.aprintf(
-          "Frame arena exhausted: capacity=%d, peak=%d",
-          len(frame_arena_buffer),
-          frame_arena.peak_used,
-        )
-      }
-      frame.in_flight = true
-
-      x.PutImage(
-        xstate.display,
-        xstate.window,
-        xstate.gc,
-        frame.image,
-        0,
-        0,
-        0,
-        0,
-        width,
-        height,
-        true,
+    mem.zero_slice(frame.buffer)
+    err := render(opts.width, opts.height, frame.buffer, camera, last, frame_allocator)
+    if err != .None {
+      return fmt.aprintf(
+        "Frame arena exhausted: capacity=%d, peak=%d",
+        len(frame_arena_buffer),
+        frame_arena.peak_used,
       )
     }
+    frame.in_flight = true
+
+    x.PutImage(
+      xstate.display,
+      xstate.window,
+      xstate.gc,
+      frame.image,
+      0,
+      0,
+      0,
+      0,
+      width,
+      height,
+      true,
+    )
 
     mem.arena_free_all(&frame_arena)
     xlib.Flush(xstate.display)
@@ -146,8 +144,6 @@ main_impl :: proc(opts: Options) -> string {
     force_redraw = false
     if end < FRAME_DURATION {
       time.accurate_sleep(FRAME_DURATION - end)
-    } else {
-      fmt.eprintln("Missed frame by ", end - FRAME_DURATION)
     }
   }
   return ""

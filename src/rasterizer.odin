@@ -53,7 +53,7 @@ rasterize :: proc(
     tl_y := f64(box[0].y) + .5
 
     area := edge_function(a.x, a.y, Point(b), Point(c))
-    if area == 0 {
+    if area >= 0 {
       continue
     }
     inverse_area := 1. / area
